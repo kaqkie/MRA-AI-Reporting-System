@@ -1,0 +1,146 @@
+@page "/login"
+@model MraReporting.Pages.LoginModel
+@{
+    var now = Model.Now;
+    var greeting = now.Hour < 12 ? "Good morning" : now.Hour < 17 ? "Good afternoon" : "Good evening";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#FFFFFF">
+    <meta name="robots" content="noindex">
+    <title>Sign in | Reporting Assistant</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+    <link rel="preload" href="/lib/fonts/public-sans.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/css/site.css?v=24">
+    <link rel="stylesheet" href="/css/login.css?v=4">
+</head>
+<body class="signin-page">
+<main class="signin">
+    <header class="signin-top">
+        <p class="signin-app">Reporting Assistant</p>
+        <p class="signin-date">@now.ToString("dddd d MMMM yyyy")</p>
+    </header>
+
+    <section class="signin-card">
+        @if (Model.SignedInAs is not null)
+        {
+            <div class="signin-form">
+                <p class="signin-greeting">@greeting</p>
+                <h1>You are signed in</h1>
+                <p class="signin-lead">Signed in as <strong>@Model.SignedInAs</strong>.</p>
+                <a class="btn btn-primary signin-submit" href="/">Continue to the app</a>
+                <form method="post" action="/logout" class="signin-switch">
+                    <button type="submit" class="btn btn-quiet signin-submit">Sign out</button>
+                </form>
+            </div>
+        }
+        else
+        {
+        <form method="post" class="signin-form" id="signin-form" novalidate>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl">
+
+            <p class="signin-greeting">@greeting</p>
+            <h1>Sign in</h1>
+            <p class="signin-lead">Use the account your administrator gave you.</p>
+
+            @if (Model.SignedOut && Model.Error is null)
+            {
+                <p class="signin-note" role="status">You have signed out.</p>
+            }
+            @if (Model.Error is not null)
+            {
+                <p class="signin-error" role="alert">@Model.Error</p>
+            }
+            @if (Model.NoAccounts)
+            {
+                <div class="signin-setup" role="status">
+                    <strong>No accounts yet.</strong>
+                    Create the first one in PowerShell, in the project folder:
+                    <code>dotnet run -- add-user yourname</code>
+                </div>
+            }
+
+            <div class="field">
+                <label for="UserName">User name</label>
+                <input id="UserName" name="UserName" type="text" value="@Model.UserName"
+                       autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+            </div>
+
+            <div class="field">
+                <label for="Password">Password</label>
+                <div class="password-box">
+                    <input id="Password" name="Password" type="password" autocomplete="current-password" required>
+                    <button type="button" class="reveal" id="reveal" aria-controls="Password" aria-pressed="false" aria-label="Show password" title="Show password">
+                        <svg class="eye-open" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                        </svg>
+                        <svg class="eye-closed" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M4 4l16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <p class="caps-warning" id="caps" hidden>Caps Lock is on.</p>
+            </div>
+
+            <button type="submit" class="btn btn-primary signin-submit" id="signin-submit">Sign in</button>
+
+            <p class="signin-help">Forgot your password? Ask the system administrator to reset it.</p>
+        </form>
+        }
+    </section>
+
+    <p class="signin-foot">Internal MRA system. Sign-ins, questions and downloads are recorded.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var pw = document.getElementById('Password');
+  var reveal = document.getElementById('reveal');
+  var caps = document.getElementById('caps');
+  var form = document.getElementById('signin-form');
+  if (!form) return; // already signed in: nothing to wire up
+  var submit = document.getElementById('signin-submit');
+  var user = document.getElementById('UserName');
+
+  // Put the cursor where it is needed: the password if the name is already filled in.
+  if (user.value) pw.focus();
+
+  reveal.addEventListener('click', function () {
+    var show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    reveal.setAttribute('aria-pressed', String(show));
+    reveal.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    reveal.title = show ? 'Hide password' : 'Show password';
+    pw.focus();
+  });
+
+  function checkCaps(e) {
+    if (e.getModifierState) caps.hidden = !e.getModifierState('CapsLock');
+  }
+  pw.addEventListener('keydown', checkCaps);
+  pw.addEventListener('keyup', checkCaps);
+  pw.addEventListener('blur', function () { caps.hidden = true; });
+
+  form.addEventListener('submit', function (e) {
+    if (!user.value.trim() || !pw.value) {
+      e.preventDefault();
+      (user.value.trim() ? pw : user).focus();
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = 'Signing in…';
+  });
+})();
+</script>
+</body>
+</html>

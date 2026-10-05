@@ -1,0 +1,122 @@
+/* Sign-in page. Uses the tokens and font from site.css.
+   White page with the sign-in card in the middle, edged in MRA green. */
+
+body.signin-page { background: var(--paper); overflow-x: hidden; }
+
+.signin {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 32px 16px;
+}
+
+.signin-top { text-align: center; color: var(--mra); }
+.signin-app { margin: 0; font-size: var(--step-3); font-weight: 800; letter-spacing: -0.02em; }
+.signin-date { margin: 4px 0 0; font-size: var(--step-0); color: var(--muted); }
+
+.signin-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px 32px 26px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--mra);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -28px rgba(11, 57, 27, 0.35);
+}
+
+.signin-form { width: 100%; }
+
+.signin-greeting { margin: 0 0 4px; font-size: var(--step-0); font-weight: 600; color: var(--mra-mid); }
+.signin-form h1 {
+  margin: 0;
+  font-size: var(--step-3);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--mra);
+}
+.signin-lead { margin: 6px 0 22px; color: var(--muted); font-size: var(--step-0); }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; margin-bottom: 6px; font-size: var(--step-0); font-weight: 600; color: var(--ink); }
+.field input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: var(--step-1);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field input:hover { border-color: #B9CBBE; }
+.field input:focus { outline: none; border-color: var(--mra); box-shadow: 0 0 0 4px var(--mra-soft); }
+
+.password-box { position: relative; }
+.password-box input { padding-right: 46px; }
+/* hide the browser's own reveal button (Edge), so there is only one eye */
+.password-box input::-ms-reveal { display: none; }
+
+.reveal {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.reveal:hover { background: var(--mra-wash); color: var(--mra); }
+.reveal .eye-closed { display: none; }
+.reveal[aria-pressed="true"] { color: var(--mra); }
+.reveal[aria-pressed="true"] .eye-open { display: none; }
+.reveal[aria-pressed="true"] .eye-closed { display: block; }
+
+.caps-warning { margin: 6px 0 0; font-size: var(--step--1); color: var(--warn); font-weight: 600; }
+
+.signin-submit { width: 100%; height: 44px; margin-top: 6px; font-size: var(--step-1); }
+
+.signin-form > a.signin-submit { display: flex; margin-top: 18px; }
+.signin-switch { margin: 10px 0 0; }
+
+.signin-help { margin: 16px 0 0; font-size: var(--step--1); color: var(--muted); text-align: center; }
+
+.signin-error, .signin-note, .signin-setup {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  font-size: var(--step-0);
+  border-radius: var(--radius);
+}
+.signin-error { background: var(--error-bg); color: var(--error); border-left: 4px solid var(--error); }
+.signin-note { background: var(--mra-wash); color: var(--mra); border-left: 4px solid var(--mra-mid); }
+.signin-setup { background: var(--warn-bg); color: var(--warn); border-left: 4px solid var(--warn-line); line-height: 1.5; }
+.signin-setup code {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: var(--step--1);
+  color: var(--ink);
+  background: #fff;
+  border-radius: 4px;
+}
+
+.signin-foot { margin: 0; max-width: 400px; font-size: var(--step--2); color: var(--muted); text-align: center; }
+
+@media (max-width: 480px) {
+  .signin { justify-content: flex-start; padding-top: 28px; }
+  .signin-card { padding: 24px 20px 20px; }
+}
