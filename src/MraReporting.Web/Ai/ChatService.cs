@@ -92,128 +92,87 @@ public sealed class ChatService
         _toolLogger.LogInformation("[TOOLS] Offering {Count} of {All} lookups: {Names}", options.Tools.Count, allTools.Count, string.Join(", ", options.Tools.Select(t => t.Name)));
         var resultRows = 0;
 
-        var answer = await StreamOnceAsync(messages, options, context, emit, rows => resultRows += rows, ct);
+        // The answer text is held back until it has been checked, so the user sees one final answer
+        // instead of a draft that disappears and is rewritten. Lookups and tables still show as they happen.
+        Task Quiet(ChatEvent e) => e.Type is "delta" or "reset" ? Task.CompletedTask : emit(e);
+
+        var answer = await StreamOnceAsync(messages, options, context, Quiet, rows => resultRows += rows, ct);
 
         // A small model sometimes writes "I need to call the X function..." instead of calling it.
-        // If no tool ran and the reply talks about tools, throw that reply away and ask again,
-        // this time requiring a tool call.
+        // If no tool ran and the reply talks about tools, ask again, this time requiring a tool call.
         if (context.AllCalls.Count == 0 && LooksLikeNarratedToolCall(answer, toolNames))
         {
-            await emit(ChatEvent.Reset());
             var forced = options.Clone();
             forced.ToolMode = ChatToolMode.RequireAny;
-            answer = await StreamOnceAsync(messages, forced, context, emit, rows => resultRows += rows, ct);
+            answer = await StreamOnceAsync(messages, forced, context, Quiet, rows => resultRows += rows, ct);
         }
 
-        // Check every figure in the answer against the query results, in code. If something does not
-        // match (an invented number, or an invented name for a tax office code), discard the answer and
-        // ask again with the real results in front of the model. If it still fails, warn the user.
+        // Check every figure in the answer against the query results, in code. If something does not match,
+        // use the app's own exact key facts when there are any (fast, and always right); otherwise ask the
+        // model once more with the real results in front of it, and warn if it still does not match.
         var question = request.Messages[request.Messages.Count - 1].Content;
         var finding = AnswerGuard.Check(answer, context.AllResults, question, _offices.Names);
         if (!finding.IsClean)
         {
             _toolLogger.LogWarning("[GUARD] Answer rejected. Unmatched figures: {Numbers}. Code expansions: {Codes}",
                 string.Join(", ", finding.UnmatchedNumbers), string.Join("; ", finding.CodeExpansions));
-            await emit(ChatEvent.Reset());
-
-            var retryMessages = new List<ChatMessage>(messages)
+            if (FactsAnswer(context.AllResults) is { } exact)
             {
-                new(ChatRole.Assistant, answer),
-                new(ChatRole.User, AnswerGuard.CorrectionMessage(finding, context.AllResults))
-            };
-            var retryOptions = options.Clone();
-            if (context.AllResults.Count > 0)
-            {
-                retryOptions.Tools = null;               // answer from the results given, no new lookups
-                retryOptions.ToolMode = ChatToolMode.None;
+                answer = exact;
             }
             else
             {
-                retryOptions.ToolMode = ChatToolMode.RequireAny;
-            }
-
-            answer = await StreamOnceAsync(retryMessages, retryOptions, context, emit, rows => resultRows += rows, ct);
-
-            finding = AnswerGuard.Check(answer, context.AllResults, question, _offices.Names);
-            if (!finding.IsClean)
-            {
-                _toolLogger.LogWarning("[GUARD] Retry still unmatched: {Numbers} {Codes}",
-                    string.Join(", ", finding.UnmatchedNumbers), string.Join("; ", finding.CodeExpansions));
-                var fallback = FactsAnswer(context.AllResults);
-                if (fallback is not null)
+                var retryMessages = new List<ChatMessage>(messages)
                 {
-                    // Use the app's own exact facts instead of an answer that could not be verified.
-                    await emit(ChatEvent.Reset());
-                    await emit(ChatEvent.Delta(fallback));
-                    answer = fallback;
+                    new(ChatRole.Assistant, answer),
+                    new(ChatRole.User, AnswerGuard.CorrectionMessage(finding, context.AllResults))
+                };
+                var retryOptions = options.Clone();
+                if (context.AllResults.Count > 0)
+                {
+                    retryOptions.Tools = null;               // answer from the results given, no new lookups
+                    retryOptions.ToolMode = ChatToolMode.None;
                 }
                 else
                 {
-                    var problems = finding.UnmatchedNumbers.Concat(finding.CodeExpansions);
+                    retryOptions.ToolMode = ChatToolMode.RequireAny;
+                }
+                answer = await StreamOnceAsync(retryMessages, retryOptions, context, Quiet, rows => resultRows += rows, ct);
+
+                finding = AnswerGuard.Check(answer, context.AllResults, question, _offices.Names);
+                if (!finding.IsClean)
+                {
+                    _toolLogger.LogWarning("[GUARD] Retry still unmatched: {Numbers} {Codes}",
+                        string.Join(", ", finding.UnmatchedNumbers), string.Join("; ", finding.CodeExpansions));
                     await emit(ChatEvent.Warning(
-                        $"Check this answer: {string.Join(", ", problems)} could not be matched to the database results. Rely on the table, not the text."));
+                        $"Check this answer: {string.Join(", ", finding.UnmatchedNumbers.Concat(finding.CodeExpansions))} could not be matched to the database results. Rely on the table, not the text."));
                 }
             }
         }
 
-        // A reply that names internal tools ("use the GetTaxpayerProfile tool") is not for the user:
-        // ask once for a rewrite in plain words, and use the exact facts if it happens again.
-        if (context.AllResults.Count > 0 && MentionsTools(answer, toolNames))
-        {
-            _toolLogger.LogWarning("[ANSWER] Reply mentioned internal tool names; asking for a rewrite.");
-            await emit(ChatEvent.Reset());
-            var rewrite = new List<ChatMessage>(messages)
-            {
-                new(ChatRole.Assistant, answer),
-                new(ChatRole.User, "Rewrite your answer for an MRA officer. Do not mention tools, functions, code or system names. " +
-                    "Explain the result in plain words using only the figures already given, and if something cannot be answered, say what the user can ask instead.")
-            };
-            var rewriteOptions = options.Clone();
-            rewriteOptions.Tools = null;
-            rewriteOptions.ToolMode = ChatToolMode.None;
-            answer = await StreamOnceAsync(rewrite, rewriteOptions, context, emit, rows => resultRows += rows, ct);
-            if (MentionsTools(answer, toolNames) && FactsAnswer(context.AllResults) is { } plain)
-            {
-                await emit(ChatEvent.Reset());
-                await emit(ChatEvent.Delta(plain));
-                answer = plain;
-            }
-        }
-
-        // 3. A reply that stops after a few words is no explanation: use the app's exact facts instead.
+        // A reply that stops after a few words is no explanation: use the app's exact facts instead.
         if (context.AllResults.Count > 0 && LooksUnfinished(answer) && FactsAnswer(context.AllResults) is { } facts)
         {
             _toolLogger.LogWarning("[ANSWER] Reply too short or unfinished ({Length} characters); using the key facts.", answer.Trim().Length);
-            await emit(ChatEvent.Reset());
-            await emit(ChatEvent.Delta(facts));
             answer = facts;
         }
 
-        // Last line of defence: never show the user a sentence that names an internal tool.
+        // Never show the user a sentence that names an internal tool: remove those sentences.
         if (MentionsTools(answer, toolNames))
         {
+            _toolLogger.LogWarning("[ANSWER] Reply mentioned internal tool names; those sentences were removed.");
             var cleaned = StripToolSentences(answer, toolNames);
-            if (cleaned.Length < 40)
-                cleaned = FactsAnswer(context.AllResults)
-                          ?? "The result is shown below. Ask a more specific question if you need a figure that is not in it.";
-            await emit(ChatEvent.Reset());
-            await emit(ChatEvent.Delta(cleaned));
-            answer = cleaned;
-            var recheck = AnswerGuard.Check(answer, context.AllResults, question, _offices.Names);
-            if (!recheck.IsClean)
-                await emit(ChatEvent.Warning(
-                    $"Check this answer: {string.Join(", ", recheck.UnmatchedNumbers.Concat(recheck.CodeExpansions))} could not be matched to the database results. Rely on the table, not the text."));
+            answer = cleaned.Length >= 40 ? cleaned : FactsAnswer(context.AllResults) ?? cleaned;
         }
 
-        // Never finish with no text: after a discarded draft the user would be left with "Looking that up...".
+        // Never finish with no text.
         if (string.IsNullOrWhiteSpace(answer))
         {
-            answer = FactsAnswer(context.AllResults) ?? EmptyAnswer(context.AllResults);
             _toolLogger.LogWarning("[ANSWER] The model gave no text; using a plain description of the results.");
-            await emit(ChatEvent.Reset());
-            await emit(ChatEvent.Delta(answer));
+            answer = FactsAnswer(context.AllResults) ?? EmptyAnswer(context.AllResults);
         }
 
+        await emit(ChatEvent.Delta(answer));
         return new ChatOutcome(answer, context.AllCalls, resultRows);
     }
 

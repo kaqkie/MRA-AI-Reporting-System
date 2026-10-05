@@ -650,6 +650,9 @@
         case 'tool': case 'result': case 'report': case 'warning':
           turn.events.push(ev);
           showEvent(reply, ev);
+          // Say what is happening while the answer is being written and checked.
+          if (!turn.answer && (ev.type === 'tool' || ev.type === 'result'))
+            reply.body.textContent = ev.type === 'tool' ? 'Looking that up…' : 'Writing the answer…';
           break;
       }
       scrollDown();
