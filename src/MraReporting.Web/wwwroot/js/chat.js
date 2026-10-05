@@ -182,6 +182,8 @@
   }
 
   function addToolNote(extras, ev) {
+    // A lookup the AI got wrong and then retried is not news for the user; only successful lookups are listed.
+    if (ev.message) return;
     const verb = /^Create/.test(ev.tool || '') ? ['Could not prepare ', 'Prepared '] : ['Could not look up ', 'Looked up '];
     const text = (ev.message ? verb[0] : verb[1]) + describeLookup(ev.tool, ev.arguments)
       + (ev.message ? '. ' + ev.message : '');

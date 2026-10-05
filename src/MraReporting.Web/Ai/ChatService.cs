@@ -283,7 +283,7 @@ public sealed class ChatService
 
     private static bool MentionsTools(string text, IEnumerable<string> toolNames) =>
         toolNames.Any(n => text.Contains(n, StringComparison.OrdinalIgnoreCase)) ||
-        Regex.IsMatch(text, @"\b(the|this|a)\s+`?\w*`?\s*(tool|function)\b", RegexOptions.IgnoreCase);
+        Regex.IsMatch(text, @"\b(the|this|a)\s+`?\w*`?\s*(tool|function)\b|\bparameters?\b|\bgroupBy\b", RegexOptions.IgnoreCase);
 
     /// <summary>Removes every sentence (and "Next step" line) that names a tool or talks about tools or functions.</summary>
     private static string StripToolSentences(string text, IEnumerable<string> toolNames)
@@ -291,7 +291,7 @@ public sealed class ChatService
         var names = toolNames.ToArray();
         bool Bad(string sentence) =>
             names.Any(n => sentence.Contains(n, StringComparison.OrdinalIgnoreCase)) ||
-            Regex.IsMatch(sentence, @"\b(tools?|functions?)\b|`", RegexOptions.IgnoreCase);
+            Regex.IsMatch(sentence, @"\b(tools?|functions?|parameters?|groupBy|argument)\b|`", RegexOptions.IgnoreCase);
 
         var paragraphs = text.Replace("\r", "").Split('\n')
             .Select(line => string.Concat(Regex.Split(line, @"(?<=[.!?])\s+").Where(sentence => !Bad(sentence)).Select(x => x + " ")).Trim())

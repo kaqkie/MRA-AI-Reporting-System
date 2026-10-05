@@ -46,6 +46,8 @@ public static class ToolRouter
             ["GetRegisterCounts", "GetStationCodes"]),
     ];
 
+    private static readonly Regex SalesWords = Words("sales", "sale", "vat", "invoice", "invoices", "turnover", "sold", "selling", "taxpayer's", "domestic");
+
     /// <summary>An invoice number typed on its own, e.g. "ABC123-4567": letters and digits mixed, at least 8 characters.</summary>
     private static readonly Regex InvoiceNumber = new(@"\b(?=[A-Z0-9/-]*\d)(?=[A-Z0-9/-]*[A-Z])[A-Z0-9/-]{8,}\b", RegexOptions.Compiled);
 
@@ -59,10 +61,16 @@ public static class ToolRouter
                 if (pattern.IsMatch(lower)) wanted.UnionWith(tools);
             if (InvoiceNumber.IsMatch(text.ToUpperInvariant())) wanted.Add("GetInvoiceDetails");
         }
+        // A customs-only question ("compare customs payments at the border posts") must not be answered with
+        // the invoice sales lookups, so those are not offered unless sales, VAT or invoices are mentioned.
+        var all2 = (question + " " + (previousQuestion ?? "")).ToLowerInvariant();
+        if (Groups[0].Pattern.IsMatch(all2) && !SalesWords.IsMatch(all2))
+            wanted.ExceptWith(["CompareSalesPeriods", "AnalyseSales", "GetSalesTotals", "GetSalesByTaxOffice", "GetTopTaxpayers"]);
+
         // Core lookups first, always in the same order, so llama-server can reuse what it has already read
         // (the instructions plus the core lookups) and only reads the extra topic lookups fresh.
         var byName = all.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        var ordered = Core.Where(byName.ContainsKey).Select(n => byName[n]).ToList();
+        var ordered = Core.Where(n => byName.ContainsKey(n) && wanted.Contains(n)).Select(n => byName[n]).ToList();
         ordered.AddRange(all.Where(t => wanted.Contains(t.Name) && !Core.Contains(t.Name)));
         return ordered;
     }

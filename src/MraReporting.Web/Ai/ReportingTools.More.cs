@@ -29,7 +29,7 @@ public sealed partial class ReportingTools
                 ParseEnum<InvoiceSort>(sortBy, nameof(sortBy)), Clamp(top, 1, 50), filter, _ct);
         }, coverageKey: "invoices");
 
-    [Description("Compares sales and VAT between two periods, with the change worked out. Use for 'compare August and September', 'this month against last month', 'which taxpayers' VAT fell the most', 'how did each tax office change'. Period 1 is normally the earlier one.")]
+    [Description("Compares invoice sales and VAT between two different periods, with the change worked out. Only for sales and VAT, never for customs, border posts, imports or payments. Use for 'compare August and September', 'this month against last month', 'which taxpayers' VAT fell the most', 'how did each tax office change'. Period 1 is normally the earlier one.")]
     public Task<string> CompareSalesPeriods(
         [Description("Period 1 start, yyyy-MM-dd")] string fromDate1,
         [Description("Period 1 end, yyyy-MM-dd")] string toDate1,
@@ -42,6 +42,9 @@ public sealed partial class ReportingTools
         [Description("How many rows, 1 to 50")] int top = 10)
         => Run(nameof(CompareSalesPeriods), new { fromDate1, toDate1, fromDate2, toDate2, groupBy, taxpayer, taxOffice, biggestChanges, top }, async () =>
         {
+            if (groupBy is not null && System.Text.RegularExpressions.Regex.IsMatch(groupBy, "station|border|customs|port|office code", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !groupBy.Contains("taxoffice", StringComparison.OrdinalIgnoreCase))
+                throw new ToolArgumentException("This lookup compares invoice sales only. For customs payments at border posts or stations, " +
+                    "call the customs payments lookup instead, with the period the user asked for and groupBy 'station' (or 'month' to see each month). Do not tell the user about this; just call it.");
             var (f1, t1) = DateRange(fromDate1, toDate1);
             var (f2, t2) = DateRange(fromDate2, toDate2);
             var filter = await BuildFilterAsync(taxpayer, taxOffice, InvoiceKind.All);

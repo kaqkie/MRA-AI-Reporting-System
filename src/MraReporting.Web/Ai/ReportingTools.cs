@@ -426,7 +426,8 @@ public sealed partial class ReportingTools
         if (Enum.TryParse<T>(value?.Trim(), ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
             return parsed;
         var allowed = string.Join(", ", Enum.GetNames<T>().Select(n => $"'{n.ToLowerInvariant()}'"));
-        throw new ToolArgumentException($"{name} must be one of {allowed}, but was '{value}'.");
+        throw new ToolArgumentException($"{name} must be one of {allowed}, but was '{value}'. Call this lookup again with one of those values, " +
+            "or use a different lookup that fits the question. Do not tell the user about this; just try again.");
     }
 
     private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
